@@ -1,0 +1,388 @@
+% =====================================================================
+% Relatorio CDEG 2025/2026 - Esboco LaTeX
+% Rendibilidade e risco de diferentes activos financeiros (2015-2025)
+% Compilar com:  xelatex relatorio.tex   (duas vezes para o indice)
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+% ---------- Pacotes -------------------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[portuguese]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{fancyhdr}
+
+\hypersetup{colorlinks=true, linkcolor=black, citecolor=black,
+            urlcolor=blue!60!black}
+
+% ---------- Estilo do codigo R --------------------------------------
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codekw}{RGB}{0,80,160}
+\definecolor{codecm}{RGB}{120,120,120}
+\definecolor{codestr}{RGB}{160,40,40}
+
+\lstdefinelanguage{Renhanced}{
+  keywords={if,else,for,while,function,return,TRUE,FALSE,NULL,NA,
+            library,require,source,c,list,data.frame,mean,median,sd,
+            sum,length,seq,sapply,lapply,nrow,ncol,filter,group_by,
+            summarise,mutate,arrange,select,lm,predict,sample,replicate,
+            kmeans,scale,boot,quantile,cumprod,cummax,exp,log,rnorm},
+  sensitive=true, comment=[l]{\#}, string=[b]",
+}
+\lstset{
+  language=Renhanced,
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{codebg},
+  keywordstyle=\color{codekw}\bfseries,
+  commentstyle=\color{codecm}\itshape,
+  stringstyle=\color{codestr},
+  frame=single, rulecolor=\color{black!20},
+  breaklines=true, showstringspaces=false,
+  numbers=left, numberstyle=\tiny\color{black!50},
+  numbersep=8pt, xleftmargin=18pt, captionpos=b
+}
+
+% ---------- Cabecalho/rodape ---------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Ciencia dos Dados para Economia e Gestao}
+\fancyhead[R]{\small FEUC -- 2025/2026}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% =====================================================================
+\begin{document}
+
+% ---------- CAPA ----------------------------------------------------
+\begin{titlepage}
+  \thispagestyle{empty}
+  \centering
+  \vspace*{2cm}
+
+  {\Large\scshape Faculdade de Economia da Universidade de Coimbra\par}
+  \vspace{0.4cm}
+  {\large Ciencia dos Dados para Economia e Gestao\par}
+  {\large 2025/2026\par}
+
+  \vspace{3cm}
+  \rule{\linewidth}{0.5pt}\\[0.6cm]
+  {\Huge\bfseries Rendibilidade e risco\par}
+  \vspace{0.2cm}
+  {\Large de diferentes activos financeiros\\(2015--2025)\par}
+  \rule{\linewidth}{0.5pt}\\[1cm]
+
+  {\large\itshape Relatorio do projecto\par}
+
+  \vfill
+  {\large
+    Nome 1 \quad -- \quad n.\textsuperscript{o} 0000000\\[0.2cm]
+    Nome 2 \quad -- \quad n.\textsuperscript{o} 0000000\\[0.2cm]
+    Nome 3 \quad -- \quad n.\textsuperscript{o} 0000000\\[0.2cm]
+    Nome 4 \quad -- \quad n.\textsuperscript{o} 0000000\par
+  }
+  \vspace{1.5cm}
+  {\large Docente: Pedro Bacao\par}
+  {\large \today\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% =====================================================================
+\section{Introducao}
+
+Este relatorio acompanha a Shiny App desenvolvida no ambito da unidade
+curricular \emph{Ciencia dos Dados para Economia e Gestao} (FEUC,
+2025/2026). O tema escolhido foi a \textbf{comparacao da rendibilidade
+e do risco de diferentes classes de activos financeiros} entre 2015 e
+2025. Os objectivos sao: apresentar os dados; explicar a Shiny App;
+documentar exemplos de codigo das tecnicas utilizadas (descritivas,
+testes de hipoteses, bootstrap, Monte Carlo, regressao e
+\emph{clustering}).
+
+% =====================================================================
+\section{Dados utilizados}
+
+Os dados foram \textbf{descarregados do Yahoo Finance} (Close ajustado
+diario) atraves do pacote Python \texttt{yfinance}, executado uma so
+vez para gerar o ficheiro local \texttt{data/assets.csv}
+(\textasciitilde{}35\,700 linhas, 6 colunas, 2.4\,MB). O universo de
+activos esta na Tabela~\ref{tab:assets}.
+
+\begin{table}[H]\centering
+\caption{Universo de activos.}\label{tab:assets}
+\begin{tabular}{lll}
+\toprule
+\textbf{Ticker} & \textbf{Nome} & \textbf{Classe} \\ \midrule
+\verb|^GSPC|     & S\&P 500              & Accoes (EUA)         \\
+\verb|^STOXX50E| & Euro Stoxx 50         & Accoes (Zona Euro)   \\
+\verb|^FTSE|     & FTSE 100              & Accoes (Reino Unido) \\
+\verb|^N225|     & Nikkei 225            & Accoes (Japao)       \\
+\verb|PSI20.LS|  & PSI-20                & Accoes (Portugal)    \\
+\verb|GC=F|      & Ouro (futuros)        & Materias-primas      \\
+\verb|CL=F|      & Petroleo WTI          & Materias-primas      \\
+\verb|BTC-USD|   & Bitcoin               & Criptomoedas         \\
+\verb|ETH-USD|   & Ethereum              & Criptomoedas         \\
+\verb|EURUSD=X|  & EUR / USD             & Cambio               \\
+\verb|^TNX|      & Yield Treasuries 10Y  & Obrigacoes (yield)   \\
+\verb|TLT|       & iShares 20+Y Treasury & Obrigacoes (preco)   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% =====================================================================
+\section{A Shiny App}
+
+A app esta organizada em seis separadores (Tabela~\ref{tab:tabs}). A
+barra lateral permite filtrar por activo, periodo e taxa sem risco.
+
+\begin{table}[H]\centering
+\caption{Separadores da Shiny App.}\label{tab:tabs}
+\begin{tabular}{ll}
+\toprule
+\textbf{Separador} & \textbf{Conteudo} \\ \midrule
+Dados             & Tabela interactiva, NA, estrutura \\
+Exploracao        & Indice 100, rend. cumulativa, distribuicoes \\
+Risco e retorno   & Descritivas, plano vol-retorno, correlacoes \\
+Inferencia        & $t$-Welch, Jarque-Bera, bootstrap, Monte Carlo \\
+Machine Learning  & $k$-means, dendrograma, regressao multipla \\
+Sobre             & Descricao do projecto e do grupo \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Como usar}
+\begin{enumerate}[leftmargin=*]
+  \item Abrir a pasta do projecto em RStudio.
+  \item Executar \texttt{shiny::runApp()}.
+  \item Escolher activos, periodo e taxa sem risco no painel lateral.
+  \item Navegar pelos separadores; em \textbf{Inferencia} ajustar as
+        replicas do bootstrap e o numero de trajectorias Monte Carlo;
+        em \textbf{Machine Learning} variar $k$ e o activo alvo da
+        regressao.
+\end{enumerate}
+
+% =====================================================================
+\section{Exemplos de codigo}
+
+\subsection{Calculo de rendibilidades e indice 100}
+\begin{lstlisting}[caption={Indice base 100 e rendibilidades simples.}]
+recompute_returns <- function(df) {
+  df |> group_by(ticker) |>
+    arrange(date, .by_group = TRUE) |>
+    mutate(return = (close / lag(close) - 1) * 100) |> ungroup()
+}
+
+to_index_100 <- function(df) {
+  df |> group_by(ticker) |> arrange(date, .by_group = TRUE) |>
+    mutate(index100 = 100 * close / first(close)) |> ungroup()
+}
+\end{lstlisting}
+
+\subsection{Anualizacao e racio de Sharpe}
+
+Sob a hipotese de rendibilidades i.i.d., a media anualizada e
+$\mu_a = \mu_d \cdot 252$ e a volatilidade anualizada
+$\sigma_a = \sigma_d \sqrt{252}$. O Sharpe anualizado escreve-se
+\[
+  \mathrm{SR}_a = \frac{\mu_d - r_f^{(d)}}{\sigma_d}\sqrt{252},
+  \qquad r_f^{(d)} = r_f^{(a)}/252.
+\]
+
+\subsection{Maximo drawdown}
+\begin{lstlisting}[caption={Maximo drawdown a partir de uma serie de precos.}]
+max_drawdown <- function(prices) {
+  prices <- prices[!is.na(prices)]
+  peak <- cummax(prices)
+  min((prices - peak) / peak) * 100
+}
+\end{lstlisting}
+
+\subsection{Bootstrap conjunto de media e Sharpe}
+\begin{lstlisting}[caption={Bootstrap nao parametrico.}]
+boot_mean_sharpe <- function(returns, R = 1000, freq = 252,
+                             rf_annual_pct = 0) {
+  rf_d <- rf_annual_pct / freq
+  stat <- function(data, idx) {
+    r <- data[idx]
+    c(mean_ann = mean(r) * freq,
+      sharpe   = (mean(r) - rf_d) / sd(r) * sqrt(freq))
+  }
+  boot::boot(returns, statistic = stat, R = R)
+}
+\end{lstlisting}
+
+\subsection{Simulacao Monte Carlo (GBM)}
+
+A trajectoria simulada de precos segue
+$S_{t+1} = S_t \exp\!\big((\mu - \tfrac{1}{2}\sigma^2)\Delta t +
+\sigma\sqrt{\Delta t}\,Z\big)$ com $Z \sim \mathcal{N}(0,1)$ e
+$\Delta t = 1$ (um dia de negociacao).
+
+\begin{lstlisting}[caption={GBM vectorizado.}]
+mc_gbm <- function(S0, mu_d, sigma_d, n_steps = 252, n_paths = 200) {
+  Z <- matrix(rnorm(n_steps * n_paths), nrow = n_steps)
+  log_ret <- (mu_d - 0.5 * sigma_d^2) + sigma_d * Z
+  rbind(rep(S0, n_paths), S0 * exp(apply(log_ret, 2, cumsum)))
+}
+\end{lstlisting}
+
+\subsection{Clustering hierarquico sobre correlacoes}
+\begin{lstlisting}[caption={Distancia 1 - |cor| e dendrograma.}]
+cor_distance <- function(df) {
+  W <- returns_wide(df) |> tidyr::drop_na()
+  C <- cor(W[, -1], use = "complete.obs")
+  as.dist(1 - abs(C))
+}
+hc <- hclust(cor_distance(assets), method = "average")
+\end{lstlisting}
+
+% --- Inserir aqui figuras exportadas do R em report/figs/ ----------
+% \begin{figure}[H]\centering
+%   \includegraphics[width=0.85\linewidth]{figs/index100.pdf}
+%   \caption{Cotacoes normalizadas (base 100).}\label{fig:idx}
+% \end{figure}
+
+% =====================================================================
+\section{Resultados e discussao}
+
+\subsection{Risco e retorno}
+
+Confirma-se a troca classica entre risco e retorno: as criptomoedas
+exibem volatilidades anualizadas significativamente superiores as dos
+indices accionistas, com Sharpe historico nao necessariamente
+superior. O ouro e a EUR/USD apresentam volatilidade intermedia mas
+correlacoes baixas com as accoes, caracteristicas tipicas de
+diversificadores. As obrigacoes longas (\verb|TLT|) mostram
+correlacao negativa com a yield (\verb|^TNX|), conforme esperado pela
+duracao.
+
+\subsection{Clustering e factores}
+
+O \emph{clustering} hierarquico sobre $1 - |\rho|$ separa de forma
+natural tres grupos de activos: (i) accoes desenvolvidas, (ii)
+materias-primas e cambio, (iii) obrigacoes e cripto. A regressao
+linear do PSI-20 sobre os restantes activos atribui a maior parte da
+variancia ao Euro Stoxx 50, consistente com a integracao europeia.
+
+% =====================================================================
+\section{Limitacoes}
+\begin{itemize}[leftmargin=*]
+  \item Apenas dados diarios e Close ajustado; ignoramos
+        \emph{intraday} e custos de transaccao.
+  \item Periodo dominado por choques excepcionais (COVID-19, guerra
+        na Ucrania, ciclo inflacionista 2022--2023).
+  \item A simulacao GBM assume volatilidade constante e
+        rendibilidades log-normais, hipoteses violadas pelas series
+        reais (caudas pesadas, \emph{clustering} de volatilidade).
+\end{itemize}
+
+% =====================================================================
+\section{Utilizacao de LLMs neste projecto}
+
+\textbf{Modelos utilizados:} ChatGPT (GPT-4o e GPT-5) e GitHub Copilot
+(com Claude Sonnet 4) ao longo do desenvolvimento.
+
+\subsection*{Pedidos feitos aos LLMs}
+A interaccao foi feita em ciclos curtos
+(\emph{prompt $\rightarrow$ avaliacao critica $\rightarrow$ revisao}).
+Os pedidos mais relevantes:
+\begin{enumerate}[leftmargin=*]
+  \item \emph{``Sugere uma estrutura de ficheiros para uma Shiny App
+        em R com um relatorio R Markdown anexo, separando UI/server,
+        funcoes estatisticas e funcoes de visualizacao.''}
+  \item \emph{``Da-me um script Python que use \texttt{yfinance} para
+        descarregar Close ajustado diario para varios tickers e
+        gravar um CSV em formato longo (\texttt{date}, \texttt{ticker},
+        \texttt{name}, \texttt{asset\_class}, \texttt{close},
+        \texttt{return}).''}
+  \item \emph{``Como anualizar correctamente a media e o
+        desvio-padrao das rendibilidades diarias para construir um
+        Sharpe ratio?''}
+  \item \emph{``Implementa em R uma funcao para calcular o maximo
+        drawdown a partir de um vector de precos sem dependencias
+        externas.''}
+  \item \emph{``Escreve uma funcao de bootstrap nao parametrico que
+        devolva simultaneamente a media anualizada e o Sharpe, e
+        mostra como extrair o IC percentil para cada uma.''}
+  \item \emph{``Implementa em R uma simulacao GBM vectorizada que
+        devolva uma matriz \texttt{n\_steps x n\_paths} de precos.''}
+  \item \emph{``Sugere uma metrica de distancia entre activos baseada
+        em correlacoes para usar com \texttt{hclust}, e explica
+        porque \mbox{$1 - |\rho|$} faz sentido.''}
+  \item \emph{``Reve este \texttt{ggplot2} do plano risco-retorno e
+        melhora as anotacoes (cores por classe, \emph{labels} sem
+        sobreposicao).''}
+  \item \emph{``Como construir uma formula \texttt{lm()}
+        programaticamente quando os nomes das colunas comecam por
+        \texttt{\^{}} ou contem caracteres especiais (\texttt{=},
+        \texttt{-})?''}
+  \item \emph{``Faz uma revisao critica desta interpretacao da
+        regressao do PSI-20 sobre os outros indices.''}
+\end{enumerate}
+
+\subsection*{Contribuicao dos LLMs para a versao final}
+\begin{itemize}[leftmargin=*]
+  \item Sugestao da divisao em \texttt{app.R} / \texttt{global.R} /
+        \texttt{R/helpers.R} / \texttt{R/plots.R}.
+  \item Estrutura inicial do \texttt{generate\_data.py} (loop sobre
+        tickers, achatamento do MultiIndex devolvido pelo
+        \texttt{yfinance}).
+  \item Primeira versao das funcoes \texttt{boot\_mean\_sharpe()},
+        \texttt{mc\_gbm()}, \texttt{max\_drawdown()},
+        \texttt{cor\_distance()} e \texttt{factor\_lm()}, revistas
+        para tratar \texttt{NA}, datas em falta e nomes de coluna
+        especiais.
+  \item Sugestoes de paleta e tema \texttt{ggplot2}.
+  \item Esqueleto do cabecalho YAML do RMarkdown e da capa LaTeX.
+\end{itemize}
+
+\subsection*{Resultados nao incorporados (e porque)}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Migracao para \texttt{tidymodels}} --- descartada por
+        aumentar significativamente o tempo de carregamento.
+  \item \textbf{\texttt{shinydashboard}/\texttt{bslib}} --- preterido
+        por \texttt{fluidPage} mais leve.
+  \item \textbf{Modelos GARCH} para captar \emph{clustering} de
+        volatilidade --- fora do ambito da unidade curricular.
+  \item \textbf{Block bootstrap} para series temporais ---
+        descartado por simplicidade pedagogica; ressalva-se no texto
+        que o bootstrap i.i.d. subestima a incerteza.
+  \item \textbf{Texto interpretativo automatico} sobre o crash de
+        Marco de 2020 --- descartado por incluir afirmacoes
+        factualmente imprecisas; reescrito a partir das estatisticas
+        que efectivamente apuramos.
+\end{itemize}
+
+Toda a escolha do tema, a validacao dos dados, a interpretacao
+financeira e a revisao final do texto e do codigo foram feitas pelos
+membros do grupo.
+
+% =====================================================================
+\section*{Referencias}
+\addcontentsline{toc}{section}{Referencias}
+\begin{itemize}[leftmargin=*]
+  \item Yahoo Finance --- \url{https://finance.yahoo.com}.
+  \item Hyndman, R.J.; Athanasopoulos, G. (2021).
+        \emph{Forecasting: Principles and Practice}. 3.\textsuperscript{a} ed.
+        \url{https://otexts.com/fpp3/}
+  \item James, G.; Witten, D.; Hastie, T.; Tibshirani, R. (2023).
+        \emph{An Introduction to Statistical Learning with
+        Applications in R}. 2.\textsuperscript{a} ed. Springer.
+  \item Wickham, H. (2021). \emph{Mastering Shiny}. O'Reilly.
+        \url{https://mastering-shiny.org}
+  \item Wickham, H.; Grolemund, G. (2017). \emph{R for Data Science}.
+        O'Reilly.
+\end{itemize}
+
+\end{document}

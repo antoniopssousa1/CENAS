@@ -1,0 +1,23 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# R
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# LaTeX build artefacts
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+
+# OS
+.DS_Store
+Thumbs.db

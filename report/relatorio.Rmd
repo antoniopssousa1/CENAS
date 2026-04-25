@@ -1,0 +1,284 @@
+---
+title: "Rendibilidade e risco de diferentes activos financeiros (2015–2025)"
+subtitle: "Ciencia dos Dados para Economia e Gestao — 2025/2026"
+author:
+  - "Nome 1"
+  - "Nome 2"
+  - "Nome 3"
+  - "Nome 4"
+date: "`r format(Sys.Date(), '%d de %B de %Y')`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+    latex_engine: xelatex
+fontsize: 11pt
+geometry: margin=2.5cm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, warning = FALSE, message = FALSE,
+  fig.align = "center", fig.width = 6.5, fig.height = 4
+)
+proj_root <- normalizePath(file.path(dirname(knitr::current_input()), ".."))
+knitr::opts_knit$set(root.dir = proj_root)
+```
+
+```{r libs}
+suppressPackageStartupMessages({
+  library(dplyr); library(tidyr); library(ggplot2); library(readr)
+  library(broom); library(boot); library(knitr)
+})
+source("R/helpers.R"); source("R/plots.R")
+assets <- read_csv("data/assets.csv", show_col_types = FALSE)
+```
+
+\newpage
+
+# Introducao
+
+Este relatorio acompanha a Shiny App desenvolvida no ambito da unidade
+curricular *Ciencia dos Dados para Economia e Gestao* (FEUC,
+2025/2026). O tema escolhido — entre os exemplos sugeridos no
+enunciado — e a **comparacao da rendibilidade e do risco de diferentes
+classes de activos financeiros** entre 2015 e 2025.
+
+Os objectivos sao:
+
+1. apresentar os dados e o universo de activos analisado;
+2. explicar a Shiny App e os procedimentos nela implementados;
+3. documentar exemplos de codigo para cada uma das tecnicas usadas
+   (estatisticas descritivas, testes de hipoteses, bootstrap, Monte
+   Carlo, regressao e *clustering*).
+
+# Dados utilizados
+
+Os dados foram **descarregados do Yahoo Finance** (Close ajustado
+diario) atraves do pacote Python `yfinance`. A lista de activos esta
+na Tabela~\ref{tab:assets}.
+
+```{r tab-assets, echo=FALSE}
+assets |>
+  distinct(ticker, name, asset_class) |>
+  arrange(asset_class, name) |>
+  kable(caption = "Universo de activos.\\label{tab:assets}",
+        col.names = c("Ticker", "Nome", "Classe"))
+```
+
+Total: **`r nrow(assets)` observacoes** e `r ncol(assets)` colunas
+(`date`, `ticker`, `name`, `asset_class`, `close`, `return`).
+
+# A Shiny App
+
+A app esta organizada em seis separadores: **Dados**, **Exploracao**,
+**Risco e retorno**, **Inferencia**, **Machine Learning** e **Sobre**.
+A barra lateral permite filtrar por activo, periodo e taxa sem risco.
+
+## Como usar
+
+1. Em RStudio, abrir a pasta do projecto e executar `shiny::runApp()`.
+2. Seleccionar os activos, o periodo e a taxa sem risco.
+3. Navegar pelos separadores. Em **Risco e retorno** o utilizador
+   obtem o plano vol-retorno; em **Inferencia** controla as replicas
+   do bootstrap e a dimensao das simulacoes; em **Machine Learning**
+   varia o numero de clusters e escolhe o activo alvo da regressao.
+
+# Exemplos de codigo
+
+## Calculo de rendibilidades e indice 100
+
+```{r ex-returns, eval=FALSE}
+recompute_returns <- function(df) {
+  df |> group_by(ticker) |>
+    arrange(date, .by_group = TRUE) |>
+    mutate(return = (close / lag(close) - 1) * 100) |> ungroup()
+}
+to_index_100 <- function(df) {
+  df |> group_by(ticker) |> arrange(date, .by_group = TRUE) |>
+    mutate(index100 = 100 * close / first(close)) |> ungroup()
+}
+```
+
+## Estatisticas anualizadas
+
+```{r ex-stats}
+risk_return_stats(assets, rf_annual_pct = 0) |>
+  select(name, asset_class, mean_ann, vol_ann, sharpe_ann,
+         max_dd_pct, skewness, kurtosis_ex) |>
+  kable(digits = 3,
+        caption = "Estatisticas anualizadas por activo.")
+```
+
+## Maximo drawdown
+
+```{r ex-dd, eval=FALSE}
+max_drawdown <- function(prices) {
+  peak <- cummax(prices)
+  min((prices - peak) / peak, na.rm = TRUE) * 100
+}
+```
+
+## Testes de hipoteses
+
+```{r ex-tests}
+sp <- assets$return[assets$ticker == "^GSPC"]
+bt <- assets$return[assets$ticker == "BTC-USD"]
+t.test(sp, bt, var.equal = FALSE)
+jarque_bera(sp)
+```
+
+## Bootstrap da media e do Sharpe
+
+```{r ex-boot}
+r  <- assets$return[assets$ticker == "^GSPC"]; r <- r[!is.na(r)]
+bo <- boot_mean_sharpe(r, R = 1000, rf_annual_pct = 0)
+boot::boot.ci(bo, type = "perc", index = 1)
+boot::boot.ci(bo, type = "perc", index = 2)
+```
+
+## Simulacao Monte Carlo (GBM)
+
+```{r ex-mc, fig.cap="Trajectorias simuladas para o S\\&P 500."}
+r  <- assets$return[assets$ticker == "^GSPC"] / 100; r <- r[!is.na(r)]
+S0 <- tail(assets$close[assets$ticker == "^GSPC"], 1)
+M  <- mc_gbm(S0, mu_d = mean(r), sigma_d = sd(r),
+             n_steps = 252, n_paths = 200)
+plot_mc_paths(M)
+```
+
+## Plano risco-retorno e clustering
+
+```{r ex-rr, fig.cap="Plano risco-retorno (anualizado)."}
+plot_risk_return(risk_return_stats(assets))
+```
+
+```{r ex-cluster, fig.cap="Clusters k-means dos activos."}
+cl <- cluster_assets(risk_return_stats(assets), k = 3)
+plot_clusters_rr(cl)
+```
+
+```{r ex-dendro, fig.cap="Dendrograma sobre 1 - |corr|."}
+plot_dendrogram(cor_distance(assets), k = 3)
+```
+
+## Regressao linear (factor exposure) com CV 5-fold
+
+```{r ex-lm}
+fit <- factor_lm(assets, "PSI20.LS")
+broom::tidy(fit) |> kable(digits = 4,
+  caption = "Coeficientes da regressao do PSI-20 sobre os outros activos.")
+broom::glance(fit) |> select(r.squared, adj.r.squared, sigma) |>
+  kable(digits = 4)
+```
+
+# Discussao
+
+O quadro empirico confirma o padrao classico de troca entre risco e
+retorno: as criptomoedas exibem volatilidades anualizadas muito
+superiores as dos indices accionistas, com Sharpe historico nao
+necessariamente superior. O ouro e a EUR/USD apresentam volatilidade
+intermedia mas correlacoes baixas com as accoes, qualidades de
+diversificacao apreciadas em carteiras. As obrigacoes longas (TLT)
+mostram correlacao tipicamente negativa com a yield (`^TNX`), como
+seria de esperar pela duracao.
+
+O *clustering* hierarquico sobre `1 - |cor|` separa de forma natural
+tres grupos: (i) accoes desenvolvidas, (ii) materias-primas e cambio,
+(iii) obrigacoes e cripto. A regressao do PSI-20 sobre os restantes
+activos atribui a maior parte da variancia ao Euro Stoxx 50, conforme
+esperado pela integracao europeia.
+
+# Limitacoes
+
+- Apenas dados diarios e Close ajustado; ignoramos dividendos
+  *cash* explicitamente, *intraday* e custos de transaccao.
+- Periodo dominado por regimes de baixas taxas de juro
+  (2015–2021) e por choques excepcionais (COVID-19, guerra na
+  Ucrania, ciclo inflacionista 2022–2023); inferencia *out-of-sample*
+  deve ser feita com prudencia.
+- A simulacao GBM assume rendibilidades log-normais e volatilidade
+  constante, hipoteses violadas pelas series reais (caudas pesadas,
+  *clustering* de volatilidade).
+
+# Utilizacao de LLMs neste projecto
+
+**Modelos utilizados:** ChatGPT (GPT-4o e GPT-5) e GitHub Copilot
+(com Claude Sonnet 4) ao longo do desenvolvimento.
+
+## Pedidos feitos aos LLMs
+
+A interaccao foi feita em ciclos curtos
+(*prompt -> avaliacao critica -> revisao*). Os pedidos mais relevantes:
+
+1. *"Sugere uma estrutura de ficheiros para uma Shiny App em R com um
+   relatorio R Markdown anexo, separando UI/server, funcoes
+   estatisticas e funcoes de visualizacao."*
+2. *"Da-me um script Python que use `yfinance` para descarregar Close
+   ajustado diario para varios tickers e gravar um CSV em formato
+   longo (date, ticker, name, asset_class, close, return)."*
+3. *"Como anualizar correctamente a media e o desvio-padrao das
+   rendibilidades diarias para construir um Sharpe ratio?"*
+4. *"Implementa uma funcao em R que calcule o maximo drawdown a
+   partir de um vector de precos sem dependencias externas."*
+5. *"Escreve uma funcao de bootstrap nao parametrico que devolva
+   simultaneamente a media anualizada e o Sharpe, e mostra como
+   extrair o IC percentil para cada uma."*
+6. *"Implementa em R uma simulacao de Geometric Brownian Motion
+   vectorizada que devolva uma matriz `n_steps x n_paths` de precos."*
+7. *"Sugere uma metrica de distancia entre activos baseada em
+   correlacoes para usar com `hclust`, e explica porque
+   `1 - |cor|` faz sentido."*
+8. *"Reve este `ggplot2` do plano risco-retorno e melhora as
+   anotacoes (cores por classe, *labels* dos pontos sem sobreposicao)."*
+9. *"Como construir formula `lm()` programaticamente quando os nomes
+   das colunas comecam por `^` ou contem caracteres especiais?"*
+10. *"Faz uma revisao critica desta interpretacao da regressao do
+    PSI-20 sobre os outros indices."*
+
+## Contribuicao dos LLMs para a versao final
+
+- Sugestao da divisao em `app.R`, `global.R`, `R/helpers.R` e
+  `R/plots.R`, adoptada na integra.
+- Estrutura inicial de `generate_data.py` (loop sobre tickers,
+  tratamento do MultiIndex devolvido pelo `yfinance`).
+- Primeira versao das funcoes `boot_mean_sharpe()`, `mc_gbm()`,
+  `max_drawdown()`, `cor_distance()` e `factor_lm()`, posteriormente
+  revistas para tratar `NA`, datas em falta e nomes especiais (`^`,
+  `=`).
+- Sugestoes de paleta e tema `ggplot2` (`theme_cdeg`).
+- Esqueleto do cabecalho YAML do RMarkdown e da capa LaTeX.
+
+## Resultados que nao foram incorporados (e porque)
+
+- **Migracao para `tidymodels`** — descartada por aumentar
+  significativamente o tempo de carregamento (restricao do enunciado).
+- **`shinydashboard` / `bslib`** — preterido por um `fluidPage` com
+  `shinytheme("flatly")`, mais leve.
+- **Modelos GARCH** para captar *clustering* de volatilidade —
+  interessante mas fora do ambito da unidade curricular.
+- **Bootstrap em blocos** (block bootstrap) para series temporais —
+  considerado mas descartado por simplicidade pedagogica; ressalva-se
+  no texto que o bootstrap i.i.d. subestima a incerteza.
+- **Texto interpretativo automatico** sobre o crash de Marco de 2020
+  — descartado por incluir afirmacoes factualmente imprecisas;
+  reescrito a partir das estatisticas que efectivamente apuramos.
+
+Toda a escolha do tema, a validacao dos dados, a interpretacao
+financeira e a revisao final do texto e do codigo foram feitas pelos
+membros do grupo. Os LLMs funcionaram como assistentes de
+*prototipagem* e de *revisao*, nao como autores autonomos.
+
+# Referencias
+
+- Yahoo Finance — `https://finance.yahoo.com`.
+- Hyndman, R.J., Athanasopoulos, G. (2021). *Forecasting: Principles
+  and Practice*. 3.a ed.
+- James, G.; Witten, D.; Hastie, T.; Tibshirani, R. (2023).
+  *An Introduction to Statistical Learning with Applications in R*.
+  2.a ed. Springer.
+- Wickham, H. (2021). *Mastering Shiny*. O'Reilly.
+  `https://mastering-shiny.org`
+- Wickham, H., Grolemund, G. (2017). *R for Data Science*. O'Reilly.
